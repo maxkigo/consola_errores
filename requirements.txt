@@ -11,3 +11,4 @@ xlsxwriter
 plotly
 statsmodels
 matplotlib
+pandas
