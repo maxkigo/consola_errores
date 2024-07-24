@@ -78,36 +78,31 @@ def errores_diario_todos():
     df_errores_diario_todos = client.query(query_errores_diario).to_dataframe()
     return df_errores_diario_todos
 
-# Singleton to track if an alert was sent in the current hour
-def get_alert_sent_status():
-    if 'alert_status' not in st.session_state:
-        st.session_state.alert_status = {'sent': False, 'timestamp': None}
-    return st.session_state.alert_status
+# Singleton to track projects that have triggered alerts
+def get_alerted_projects():
+    if 'alerted_projects' not in st.session_state:
+        st.session_state.alerted_projects = set()
+    return st.session_state.alerted_projects
 
-alert_status = get_alert_sent_status()
-current_time = datetime.now()
+alerted_projects = get_alerted_projects()
 
 df_errores_diario_todos = errores_diario_todos()
 
 # Verificar si hay algún proyecto con más del 5% de errores
 proyectos_con_errores_altos = df_errores_diario_todos[df_errores_diario_todos['porcentaje_error'] > 5]
 
-# Check if an alert needs to be sent
-if not proyectos_con_errores_altos.empty:
-    if (alert_status['timestamp'] is None or
-            (current_time - alert_status['timestamp']).total_seconds() >= 3600):
+# Check if an alert needs to be sent for new projects
+nuevos_proyectos_con_errores = proyectos_con_errores_altos[~proyectos_con_errores_altos['proyecto'].isin(alerted_projects)]
 
-        # Preparar el mensaje de alerta
-        mensaje_alerta = "Se han detectado los siguientes proyectos con más del 5% de errores:\n\n"
-        for idx, row in proyectos_con_errores_altos.iterrows():
-            mensaje_alerta += f"Proyecto: {row['proyecto']}, Porcentaje de Error: {row['porcentaje_error']}%\n"
+if not nuevos_proyectos_con_errores.empty:
+    # Preparar el mensaje de alerta
+    mensaje_alerta = "Se han detectado los siguientes proyectos con más del 5% de errores:\n\n"
+    for idx, row in nuevos_proyectos_con_errores.iterrows():
+        mensaje_alerta += f"Proyecto: {row['proyecto']}, Porcentaje de Error: {row['porcentaje_error']}%\n"
+        alerted_projects.add(row['proyecto'])  # Mark project as alerted
 
-        # Enviar el mensaje de alerta a Telegram
-        enviar_alerta_telegram(mensaje_alerta)
-
-        # Update alert status
-        alert_status['sent'] = True
-        alert_status['timestamp'] = current_time
+    # Enviar el mensaje de alerta a Telegram
+    enviar_alerta_telegram(mensaje_alerta)
 
 # Mostrar la tabla en Streamlit
 st.write(df_errores_diario_todos)
